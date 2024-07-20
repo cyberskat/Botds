@@ -9,19 +9,33 @@ import math
 import random
 import asyncio
 from disnake import Activity, ActivityType
-
 import youtube_dl
 from async_timeout import timeout
+
+#connect to databases
+try:
+    with connect(
+        host="localhost",
+        user="your name",
+        password="your password",
+        database="MPG",
+    ) as connection:
+        print("You're connected to MySQL")
+except Error as e:
+    print(e)
+#local connection(spec)
+cnn = mysql.connector.connect(host="localhost",user="your name",password="your password",database="MPG",)
 
 cursor = cnn.cursor()
 intents = disnake.Intents.default()
 intents.message_content = True
 intents.members = True
-bot = commands.Bot(command_prefix='>', intents=intents, test_guilds=[1210944891090247741])
+bot = commands.Bot(command_prefix='>', intents=intents, test_guilds=['your guild id'])
+
+#work with rection events
 @bot.event
 async def on_raw_reaction_add(payload: disnake.RawReactionActionEvent):
     """Gives a role based on a reaction emoji."""
-    # Make sure that the message the user is reacting to is the one we care about.
     guild = bot.get_guild(payload.guild_id)
     gid = str(guild.id) + '_emoji'
     print(gid)
@@ -31,9 +45,8 @@ async def on_raw_reaction_add(payload: disnake.RawReactionActionEvent):
     wehave = "SELECT * FROM {gi} WHERE user_id=%s"
     cursor.execute(wehave.format(gi=gid+'_req'), (payload.user_id,))
     req_check = cursor.fetchall()
-    # ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-    #                                               удаление
-    # ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    #check reqests to takes new dependeces for reactions
     if req_check !=[]:
         if payload.message_id!=req_check[0][1]:
             return
@@ -52,27 +65,31 @@ async def on_raw_reaction_add(payload: disnake.RawReactionActionEvent):
         cursor.execute(sql,(payload.user_id,))
         cnn.commit()
     if payload.message_id != role_message_id[0][1]:
+        # check mess what we need
         return
     if guild is None:
-        # Check if we're still in the guild and it's cached.
+        # check if we're still in the guild and it's cached.
         return
+    # try to give the role
     try:
         gid = str(guild.id)+'_emoji'
         wehave = "SELECT * FROM {gi} WHERE emo=%s"
         cursor.execute(wehave.format(gi = gid), (str(payload.emoji),))
         role_id = cursor.fetchall()
     except KeyError:
-        # If the emoji isn't the one we care about then exit as well.
+        # if the emoji isn't the one we care about then exit as well.
         return
     role = guild.get_role(role_id[0][1])
     if role is None:
-        # Make sure the role still exists and is valid.
+        # make sure the role still exists and is valid.
         return
     try:
         await payload.member.add_roles(role)
     except disnake.HTTPException:
         print("No role added")
         pass
+
+#swap main message to role dispencer
 @bot.slash_command(description="update message(id) which have emoji to role func")
 async def upd_emo_msg(inter: disnake.ApplicationCommandInteraction,message_id):
     guild = bot.get_guild(inter.guild_id)
@@ -81,6 +98,8 @@ async def upd_emo_msg(inter: disnake.ApplicationCommandInteraction,message_id):
     cursor.execute(upda_emo_msg.format(gi=gid), (int(message_id),'emo_msg',))
     cnn.commit()
     await inter.response.send_message("Successfully updated",ephemeral=True,delete_after=10)
+
+#command make assciation role to emoj
 @bot.slash_command(description="update message(id) which have emoji to role func")
 async def link_emo_rol(inter: disnake.ApplicationCommandInteraction,role_id):
     guild = bot.get_guild(inter.guild_id)
@@ -91,6 +110,8 @@ async def link_emo_rol(inter: disnake.ApplicationCommandInteraction,role_id):
     cursor.execute(insert_req.format(g=gid+'_req'), (inter.author.id,msg.id,role_id))
     cnn.commit()
 @bot.event
+
+
 async def on_raw_reaction_remove(payload: disnake.RawReactionActionEvent):
     """Removes a role based on a reaction emoji."""
     guild = bot.get_guild(payload.guild_id)
@@ -101,7 +122,7 @@ async def on_raw_reaction_remove(payload: disnake.RawReactionActionEvent):
     if payload.message_id != role_message_id[0][1]:
         return
     if guild is None:
-        # Check if we're still in the guild and it's cached.
+        # check if we're still in the guild and it's cached.
         return
 
     try:
@@ -110,24 +131,25 @@ async def on_raw_reaction_remove(payload: disnake.RawReactionActionEvent):
         cursor.execute(wehave.format(gi=gid), (str(payload.emoji),))
         role_id = cursor.fetchall()
     except KeyError:
-        # If the emoji isn't the one we care about then exit as well.
+        # if the emoji isn't the one we care about then exit as well.
         return
 
     role = guild.get_role(role_id[0][1])
     if role is None:
-        # Make sure the role still exists and is valid.
+        # make sure the role still exists and is valid.
         return
-    # The payload for `on_raw_reaction_remove` does not provide `.member`
     # so we must get the member ourselves from the payload's `.user_id`.
     member = guild.get_member(payload.user_id)
     if member is None:
-        # Make sure the member still exists and is valid.
+        # make sure the member still exists and is valid.
         return
     try:
         # Finally, remove the role.
         await member.remove_roles(role)
     except Exception as e:
         print(f"Ошибка: {str(e)}")
+
+#welcome message
 @bot.event
 async def on_ready():
     print(f'Logged!')
@@ -142,6 +164,8 @@ async def on_voice_state_update(member, before, after):
                     await before.channel.delete()
                 except:
                     pass
+
+#creating voice chat with yors param(name,limit users)
 @bot.slash_command(description="create voice chat")
 async def create(inter: disnake.ApplicationCommandInteraction,name='',count=0):
     try:
@@ -161,9 +185,11 @@ async def create(inter: disnake.ApplicationCommandInteraction,name='',count=0):
     except:
         await inter.response.send_message('I couldn\'t do it', delete_after=10,ephemeral=True)
 #@commands.has_any_role(здесь через запятую перечисляем роли)
+
+#connecting members to databases
 @bot.event
 async def on_message(message):
-
+    #local database for any guilds
     guild = str(message.guild.id)+'_emoji'
     create_table_role = """CREATE TABLE IF NOT EXISTS {table}(emo VARCHAR(100) PRIMARY KEY,rol BIGINT)"""
     cursor.execute(create_table_role.format(table=guild))
@@ -183,6 +209,7 @@ async def on_message(message):
     wehave = "SELECT * FROM discord_users WHERE id=(%s)"
     cursor.execute(wehave,(message.author.id,))
     result = cursor.fetchall()
+    #register members score points
     if result == []:
         insert_movies_query = """INSERT INTO discord_users (id,money) VALUES ((%s),0)"""
         cursor.execute(insert_movies_query,(message.author.id,))
@@ -194,4 +221,4 @@ async def on_message(message):
     print(f'Message: {message.content}')
 #bot.add_cog(music_func.Music(bot))
 bot.remove_command('help')
-bot.run('')
+bot.run('your bot token')
